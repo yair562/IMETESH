@@ -1,0 +1,531 @@
+-- =========================================================
+-- SISTEMA LMS ACADÉMICO INSTITUCIONAL
+-- BASE DE DATOS FINAL - POSTGRESQL
+-- =========================================================
+
+-- =========================================================
+-- EXTENSIÓN UUID
+-- =========================================================
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- =========================================================
+-- TIPOS ENUM
+-- =========================================================
+
+CREATE TYPE rol_usuario AS ENUM (
+    'administrador',
+    'docente',
+    'estudiante'
+);
+
+CREATE TYPE estado_usuario AS ENUM (
+    'activo',
+    'suspendido'
+);
+
+CREATE TYPE visibilidad_recurso AS ENUM (
+    'publico',
+    'grupo',
+    'privado'
+);
+
+CREATE TYPE tipo_recurso AS ENUM (
+    'pdf',
+    'video',
+    'imagen',
+    'documento',
+    'enlace'
+);
+
+CREATE TYPE estado_inscripcion AS ENUM (
+    'activo',
+    'baja'
+);
+
+CREATE TYPE rol_en_grupo AS ENUM (
+    'estudiante',
+    'asistente'
+);
+
+CREATE TYPE estado_entrega AS ENUM (
+    'pendiente',
+    'entregado',
+    'revisado',
+    'rechazado'
+);
+
+-- =========================================================
+-- TABLA: CARRERAS
+-- =========================================================
+
+CREATE TABLE carreras (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+
+    nombre VARCHAR(150) NOT NULL,
+    slug VARCHAR(160) UNIQUE NOT NULL,
+    descripcion TEXT,
+
+    activa BOOLEAN DEFAULT TRUE,
+
+    creado_en TIMESTAMP DEFAULT NOW(),
+    actualizado_en TIMESTAMP DEFAULT NOW()
+);
+
+-- =========================================================
+-- TABLA: USUARIOS
+-- =========================================================
+
+CREATE TABLE usuarios (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+
+    carrera_id UUID NULL,
+
+    nombre VARCHAR(120) NOT NULL,
+
+    correo VARCHAR(150) UNIQUE NOT NULL,
+
+    hash_contrasena TEXT NOT NULL,
+
+    rol rol_usuario NOT NULL DEFAULT 'estudiante',
+
+    estado estado_usuario NOT NULL DEFAULT 'activo',
+
+    acepto_terminos BOOLEAN DEFAULT FALSE,
+
+    fecha_aceptacion TIMESTAMP NULL,
+
+    ultimo_acceso TIMESTAMP NULL,
+
+    creado_en TIMESTAMP DEFAULT NOW(),
+    actualizado_en TIMESTAMP DEFAULT NOW(),
+
+    CONSTRAINT fk_usuario_carrera
+        FOREIGN KEY (carrera_id)
+        REFERENCES carreras(id)
+        ON DELETE SET NULL
+);
+
+-- =========================================================
+-- TABLA: MATERIAS
+-- =========================================================
+
+CREATE TABLE materias (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+
+    carrera_id UUID NOT NULL,
+
+    nombre VARCHAR(150) NOT NULL,
+
+    slug VARCHAR(160) UNIQUE NOT NULL,
+
+    descripcion TEXT,
+
+    creado_en TIMESTAMP DEFAULT NOW(),
+    actualizado_en TIMESTAMP DEFAULT NOW(),
+
+    CONSTRAINT fk_materia_carrera
+        FOREIGN KEY (carrera_id)
+        REFERENCES carreras(id)
+        ON DELETE CASCADE
+);
+
+-- =========================================================
+-- TABLA: GRUPOS
+-- =========================================================
+
+CREATE TABLE grupos (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+
+    carrera_id UUID NOT NULL,
+
+    materia_id UUID NOT NULL,
+
+    docente_id UUID NULL,                     -- Permite nulo para borrado del docente
+
+    nombre VARCHAR(50) NOT NULL,
+
+    descripcion TEXT,
+
+    periodo_academico VARCHAR(20) NOT NULL,
+
+    nip_acceso VARCHAR(20) UNIQUE NOT NULL,
+
+    activo BOOLEAN DEFAULT TRUE,
+
+    creado_en TIMESTAMP DEFAULT NOW(),
+    actualizado_en TIMESTAMP DEFAULT NOW(),
+
+    CONSTRAINT fk_grupo_carrera
+        FOREIGN KEY (carrera_id)
+        REFERENCES carreras(id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT fk_grupo_materia
+        FOREIGN KEY (materia_id)
+        REFERENCES materias(id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT fk_grupo_docente
+        FOREIGN KEY (docente_id)
+        REFERENCES usuarios(id)
+        ON DELETE SET NULL
+);
+
+-- =========================================================
+-- TABLA: INSCRIPCIONES
+-- =========================================================
+
+CREATE TABLE inscripciones (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+
+    grupo_id UUID NOT NULL,
+
+    usuario_id UUID NOT NULL,
+
+    rol_en_grupo rol_en_grupo DEFAULT 'estudiante',
+
+    estado estado_inscripcion DEFAULT 'activo',
+
+    fecha_ingreso TIMESTAMP DEFAULT NOW(),
+
+    CONSTRAINT fk_inscripcion_grupo
+        FOREIGN KEY (grupo_id)
+        REFERENCES grupos(id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT fk_inscripcion_usuario
+        FOREIGN KEY (usuario_id)
+        REFERENCES usuarios(id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT unique_inscripcion
+        UNIQUE(grupo_id, usuario_id)
+);
+
+-- =========================================================
+-- TABLA: UNIDADES
+-- =========================================================
+
+CREATE TABLE unidades (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+
+    materia_id UUID NOT NULL,
+
+    numero_unidad INT NOT NULL,
+
+    titulo VARCHAR(200) NOT NULL,
+
+    descripcion TEXT,
+
+    competencias TEXT,
+
+    orden INT DEFAULT 0,
+
+    publicado BOOLEAN DEFAULT FALSE,
+
+    creado_en TIMESTAMP DEFAULT NOW(),
+    actualizado_en TIMESTAMP DEFAULT NOW(),
+
+    CONSTRAINT fk_unidad_materia
+        FOREIGN KEY (materia_id)
+        REFERENCES materias(id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT unique_unidad_por_materia
+        UNIQUE(materia_id, numero_unidad)
+);
+
+-- =========================================================
+-- TABLA: TEMAS
+-- =========================================================
+
+CREATE TABLE temas (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+
+    unidad_id UUID NOT NULL,
+
+    tema_padre_id UUID NULL,
+
+    titulo VARCHAR(200) NOT NULL,
+
+    descripcion TEXT,
+
+    orden INT DEFAULT 0,
+
+    publicado BOOLEAN DEFAULT FALSE,
+
+    creado_en TIMESTAMP DEFAULT NOW(),
+    actualizado_en TIMESTAMP DEFAULT NOW(),
+
+    CONSTRAINT fk_tema_unidad
+        FOREIGN KEY (unidad_id)
+        REFERENCES unidades(id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT fk_tema_padre
+        FOREIGN KEY (tema_padre_id)
+        REFERENCES temas(id)
+        ON DELETE SET NULL,
+
+    CONSTRAINT unique_orden_tema
+        UNIQUE(unidad_id, orden)
+);
+
+-- =========================================================
+-- TABLA: RECURSOS
+-- =========================================================
+
+CREATE TABLE recursos (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+
+    tema_id UUID NULL,
+
+    unidad_id UUID NULL,
+
+    grupo_id UUID NULL,
+
+    subido_por UUID NOT NULL,
+
+    titulo VARCHAR(255) NOT NULL,
+
+    descripcion TEXT,
+
+    tipo_recurso tipo_recurso NOT NULL,
+
+    visibilidad visibilidad_recurso NOT NULL DEFAULT 'grupo',
+
+    nombre_original VARCHAR(255),
+
+    nombre_guardado VARCHAR(255),
+
+    ruta_almacenamiento TEXT,
+
+    tipo_mime VARCHAR(100),
+
+    tamaño_archivo BIGINT,
+
+    url_externa TEXT,
+
+    orden INT DEFAULT 0,
+
+    publicado BOOLEAN DEFAULT TRUE,
+
+    creado_en TIMESTAMP DEFAULT NOW(),
+    actualizado_en TIMESTAMP DEFAULT NOW(),
+
+    CONSTRAINT fk_recurso_tema
+        FOREIGN KEY (tema_id)
+        REFERENCES temas(id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT fk_recurso_unidad
+        FOREIGN KEY (unidad_id)
+        REFERENCES unidades(id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT fk_recurso_grupo
+        FOREIGN KEY (grupo_id)
+        REFERENCES grupos(id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT fk_recurso_usuario
+        FOREIGN KEY (subido_por)
+        REFERENCES usuarios(id)
+        ON DELETE SET NULL,
+
+    CONSTRAINT ck_recurso_contexto
+        CHECK (
+            tema_id IS NOT NULL
+            OR unidad_id IS NOT NULL
+            OR grupo_id IS NOT NULL
+        ),
+
+    CONSTRAINT ck_recurso_visibilidad_grupo
+        CHECK (
+            (visibilidad <> 'grupo')
+            OR (grupo_id IS NOT NULL)
+        )
+);
+
+-- =========================================================
+-- TABLA: TAREAS
+-- =========================================================
+
+CREATE TABLE tareas (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+
+    grupo_id UUID NOT NULL,
+
+    creado_por UUID NOT NULL,
+
+    titulo VARCHAR(255) NOT NULL,
+
+    descripcion TEXT,
+
+    fecha_entrega TIMESTAMP,
+
+    archivo_adjunto TEXT,
+
+    publicada BOOLEAN DEFAULT FALSE,
+
+    creado_en TIMESTAMP DEFAULT NOW(),
+    actualizado_en TIMESTAMP DEFAULT NOW(),
+
+    CONSTRAINT fk_tarea_grupo
+        FOREIGN KEY (grupo_id)
+        REFERENCES grupos(id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT fk_tarea_creador
+        FOREIGN KEY (creado_por)
+        REFERENCES usuarios(id)
+        ON DELETE SET NULL
+);
+
+-- =========================================================
+-- TABLA: ENTREGAS
+-- =========================================================
+
+CREATE TABLE entregas (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+
+    tarea_id UUID NOT NULL,
+
+    usuario_id UUID NOT NULL,
+
+    ruta_archivo TEXT,
+
+    estado estado_entrega DEFAULT 'entregado',
+
+    entregado_en TIMESTAMP DEFAULT NOW(),
+
+    calificacion NUMERIC(5,2),
+
+    retroalimentacion TEXT,
+
+    creado_en TIMESTAMP DEFAULT NOW(),
+    actualizado_en TIMESTAMP DEFAULT NOW(),
+
+    CONSTRAINT fk_entrega_tarea
+        FOREIGN KEY (tarea_id)
+        REFERENCES tareas(id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT fk_entrega_usuario
+        FOREIGN KEY (usuario_id)
+        REFERENCES usuarios(id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT unique_entrega
+        UNIQUE(tarea_id, usuario_id)
+);
+
+-- =========================================================
+-- TRIGGER: VALIDAR DOCENTE
+-- =========================================================
+
+CREATE OR REPLACE FUNCTION verificar_docente()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.docente_id IS NOT NULL THEN
+        IF NOT EXISTS (
+            SELECT 1
+            FROM usuarios
+            WHERE id = NEW.docente_id
+            AND rol = 'docente'
+        ) THEN
+            RAISE EXCEPTION 'El usuario asignado no tiene rol de docente';
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_verificar_docente
+BEFORE INSERT OR UPDATE
+ON grupos
+FOR EACH ROW
+EXECUTE FUNCTION verificar_docente();
+
+-- =========================================================
+-- TRIGGER: VALIDAR CONSISTENCIA CARRERA-MATERIA
+-- =========================================================
+
+CREATE OR REPLACE FUNCTION verificar_carrera_materia()
+RETURNS TRIGGER AS $$
+DECLARE
+    carrera_materia UUID;
+BEGIN
+    SELECT carrera_id
+    INTO carrera_materia
+    FROM materias
+    WHERE id = NEW.materia_id;
+
+    IF carrera_materia <> NEW.carrera_id THEN
+        RAISE EXCEPTION 'La carrera del grupo no coincide con la carrera de la materia';
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_verificar_carrera_materia
+BEFORE INSERT OR UPDATE
+ON grupos
+FOR EACH ROW
+EXECUTE FUNCTION verificar_carrera_materia();
+
+-- =========================================================
+-- ÍNDICES
+-- =========================================================
+
+CREATE INDEX idx_usuarios_correo
+ON usuarios(correo);
+
+CREATE INDEX idx_usuarios_rol_estado
+ON usuarios(rol, estado);
+
+CREATE INDEX idx_materias_carrera
+ON materias(carrera_id);
+
+CREATE INDEX idx_grupos_carrera
+ON grupos(carrera_id);
+
+CREATE INDEX idx_grupos_materia
+ON grupos(materia_id);
+
+CREATE INDEX idx_grupos_docente
+ON grupos(docente_id);
+
+CREATE INDEX idx_inscripciones_grupo
+ON inscripciones(grupo_id);
+
+CREATE INDEX idx_inscripciones_usuario
+ON inscripciones(usuario_id);
+
+CREATE INDEX idx_unidades_materia
+ON unidades(materia_id);
+
+CREATE INDEX idx_temas_unidad
+ON temas(unidad_id);
+
+CREATE INDEX idx_recursos_tema
+ON recursos(tema_id);
+
+CREATE INDEX idx_recursos_grupo
+ON recursos(grupo_id);
+
+CREATE INDEX idx_recursos_subido_por
+ON recursos(subido_por);
+
+CREATE INDEX idx_tareas_grupo
+ON tareas(grupo_id);
+
+CREATE INDEX idx_tareas_creador
+ON tareas(creado_por);
+
+CREATE INDEX idx_entregas_tarea
+ON entregas(tarea_id);
+
+CREATE INDEX idx_entregas_usuario
+ON entregas(usuario_id);

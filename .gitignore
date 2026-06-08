@@ -1,22 +1,25 @@
 # =========================
-# Environment
+# Variables de entorno (credenciales)
 # =========================
 .env
 
 # =========================
-# Python
-# =========================
-__pycache__/
-*.py[cod]
-venv/
-
-# =========================
-# Node
+# Dependencias (Node, Python, etc.)
 # =========================
 node_modules/
+vendor/
+__pycache__/
+*.pyc
+*.pyo
 
 # =========================
-# Docker
+# Archivos de sistema operativo
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# Docker (volumen de datos, no se versiona)
 # =========================
 postgres_data/
 
@@ -27,6 +30,6 @@ postgres_data/
 .idea/
 
 # =========================
-# Datos dinámicos
+# Logs
 # =========================
-app_data/
+*.log
