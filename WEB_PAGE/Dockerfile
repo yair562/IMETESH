@@ -1,19 +1,15 @@
 FROM python:3.12-slim
 
-WORKDIR /app
+WORKDIR /code
 
-# Instalar dependencias
 COPY requirements.txt .
+
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copiar el código
 COPY . .
 
-# Puerto por defecto de Flask
-EXPOSE 5000
+ENV FLASK_APP=app:create_app
 
-# Variables de entorno para Flask
-ENV FLASK_APP=app
-ENV FLASK_ENV=development
+EXPOSE 5000
 
 CMD ["flask", "run", "--host=0.0.0.0"]
